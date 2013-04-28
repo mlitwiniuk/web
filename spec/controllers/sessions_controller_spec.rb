@@ -22,8 +22,10 @@ describe SessionsController do
 
   describe "#create" do
     before :each do
-      @ldap = mock('Net::LDAP', :host= => nil, :port= => nil, :auth => nil)
-      Net::LDAP.stub!(:new).and_return(@ldap)
+      if defined?(Net::LDAP)
+        @ldap = mock('Net::LDAP', :host= => nil, :port= => nil, :auth => nil)
+        Net::LDAP.stub!(:new).and_return(@ldap)
+      end
     end
 
     context '[valid credentials]' do
@@ -34,7 +36,7 @@ describe SessionsController do
         entry = {:givenname => %w(Sancho), :sn => %w(Sample)}
         entry.stub!(:dn).and_return('some dn')
         @ldap.stub!(:search).and_yield(entry)
-      end
+      end if defined?(Net::LDAP)
 
       it "should log in a valid username and password" do
         post :create, username: @user.username, password: 'password123'
@@ -63,7 +65,7 @@ describe SessionsController do
     end
 
     it "should not log in an invalid username and password" do
-      @ldap.stub!(:bind).and_return(false)
+      @ldap.stub!(:bind).and_return(false) if defined?(Net::LDAP)
       post :create, username: 'username', password: 'wrong'
       response.should render_template('new')
       session[:user_id].should be_nil

@@ -94,7 +94,9 @@ class BugObserver < ActiveRecord::Observer
     if !bug.fixed? && bug.fixed_was && !bug.irrelevant?
       attrs[:data]['from'] = 'fixed'
       Event.create! attrs
-      NotificationMailer.deliver :reopened, bug unless bug.modifier.kind_of?(User)
+      Squash::Ruby.fail_silently do
+        NotificationMailer.reopened(bug).deliver unless bug.modifier.kind_of?(User)
+      end
     elsif !bug.fixed? && !bug.irrelevant? && bug.irrelevant_was
       attrs[:data]['from'] = 'irrelevant'
       Event.create! attrs
@@ -102,14 +104,15 @@ class BugObserver < ActiveRecord::Observer
   end
 
   def send_create_emails(bug)
-    NotificationMailer.deliver :initial, bug
-    NotificationMailer.deliver(:blame, bug) if bug.blamed_commit
+    Squash::Ruby.fail_silently do
+      NotificationMailer.initial(bug).deliver
+      NotificationMailer.blame(bug).deliver if bug.blamed_commit
+    end
   end
 
   def send_update_emails(bug)
     if bug.previous_changes['fix_deployed'] == [false, true]
-      worker = DeployNotificationMailer.new(bug)
-      Multithread.spinoff(nil, 80) { worker.perform }
+      BackgroundRunner.run DeployNotificationMailer, bug.id
     end
   end
 
@@ -121,25 +124,22 @@ class BugObserver < ActiveRecord::Observer
 
   def notify_pagerduty(bug)
     return unless bug.environment.notifies_pagerduty?
-    return unless bug.environment.project.pagerduty_service_key
+    return unless bug.environment.project.pagerduty
 
     au = bug.previous_changes['assigned_user_id'] || []
     ir = bug.previous_changes['irrelevant'] || []
     if (!au.first && au.last) || (!ir.first && ir.last)
-      worker = PagerDutyAcknowledger.new(bug)
-      Multithread.spinoff("PagerDutyAcknowledger:#{bug.id}", 20) { worker.perform }
+      BackgroundRunner.run PagerDutyAcknowledger, bug.id
     end
 
     res = bug.previous_changes['fixed'] || []
     if !res.first && res.last
-      worker = PagerDutyAcknowledger.new(bug)
-      Multithread.spinoff("PagerDutyAcknowledger:#{bug.id}", 20) { worker.perform }
+      BackgroundRunner.run PagerDutyAcknowledger, bug.id
     end
 
     res = bug.previous_changes['fix_deployed'] || []
     if !res.first && res.last
-      worker = PagerDutyResolver.new(bug)
-      Multithread.spinoff("PagerDutyResolver:#{bug.id}", 20) { worker.perform }
+      BackgroundRunner.run PagerDutyResolver, bug.id
     end
   end
 end

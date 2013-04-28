@@ -90,16 +90,21 @@ concurrency model (e.g., Resque workers), or have backported the necessary
 changes. In the future, when these changes are released, the Gemfile will be
 altered.
 
-**Why do you use threads to accomplish background tasks instead of fibers or
-Resque workers?** Squash was originally built for Square, which runs all its
-services on JRuby. Using threads is very efficient in JRuby, and avoids the
-overhead of having to deploy both a website and workers.
+**Why don't you use my favorite backgrounding library?** Squash was originally
+built for Square, which runs all its services on JRuby. Using threads is very
+efficient in JRuby, and avoids the overhead of having to deploy both a website
+and workers.
 
 If you are running Squash in a non-thread-safe (or multithreading-unfriendly)
-environment, it should be easy to convert to a Resque-based environment. All
-threaded code is encapsulated in worker classes that respond to a `.perform`
-method, making them Resque-ready. Simply locate all occurrences of
-`Multithread.spinoff` in the code and replace it with calls to `Resque.enqueue`.
+environment, you can use Resque instead. If you want to use some other
+backgrounding library, you can easily write your own adapter. All threaded code
+is invoked using {BackgroundRunner.run}, which then uses the settings in the
+`concurrency.yml` Configoro file to invoke the correct module under
+`lib/background_runner`. The default is to use {BackgroundRunner::Multithread},
+which uses the {Multithread} module to execute the task in its own thread. You
+can edit the YAML file and switch the background runner to Resque, or implement
+your own `BackgroundRunner` module. See the {BackgroundRunner} documentation for
+more details.
 
 If you do this successfully and wish to save future Squash users the effort,
 feel free to turn your changes into a pull request.

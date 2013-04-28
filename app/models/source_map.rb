@@ -4,13 +4,13 @@
 #    you may not use this file except in compliance with the License.
 #    You may obtain a copy of the License at
 #
-#        http://www.apache.org/licences/LICENSE-2.0
+#        http://www.apache.org/licenses/LICENSE-2.0
 #
 #    Unless required by applicable law or agreed to in writing, software
-#    distributed under the Licence is distributed on an "AS IS" BASIS,
+#    distributed under the License is distributed on an "AS IS" BASIS,
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the Licence for the specific language governing permission and
-#    limitation under the License.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
 
 # Source mapping information for a JavaScript project. This model stores a
 # mapping of minified JavaScript code location and symbol names to
@@ -58,7 +58,9 @@ class SourceMap < ActiveRecord::Base
             presence:       true,
             known_revision: {repo: ->(map) { RepoProxy.new(map, :environment, :project) }}
 
-  after_commit :sourcemap_matching_traces, on: :create
+  after_commit(on: :create) do |map|
+    BackgroundRunner.run SourceMapWorker, map.id
+  end
 
   attr_accessible :revision, :map, as: :api
   attr_readonly :revision
@@ -97,12 +99,5 @@ class SourceMap < ActiveRecord::Base
     else
       nil
     end
-  end
-
-  private
-
-  def sourcemap_matching_traces
-    worker = SourceMapWorker.new(self)
-    Multithread.spinoff("SourceMapWorker:#{id}", 60) { worker.perform }
   end
 end
